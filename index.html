@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>霖林小屋 · Forest Cabin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: system-ui, -apple-system, sans-serif; }
+    canvas { display: block; }
+    #ui {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: calc(100% - 24px);
+    }
+    button {
+      background: rgba(30, 30, 40, 0.75);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 14px;
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    button:active { background: rgba(60, 60, 80, 0.9); }
+    button.active { background: rgba(80, 120, 200, 0.8); border-color: #aaccff; }
+    #info {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      color: rgba(255,255,255,0.7);
+      font-size: 12px;
+      pointer-events: none;
+      text-shadow: 0 1px 2px #000;
+    }
+    @media (max-width: 600px) {
+      button { padding: 10px 12px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <button data-scene="sunny" class="active">☀️ 晴天</button>
+    <button data-scene="fog">🌫️ 雾天</button>
+    <button data-scene="sunset">🌅 日落</button>
+    <button data-scene="night">🌙 夜晚</button>
+    <button data-scene="rain">🌧️ 雨天</button>
+    <button data-scene="dawn">🌄 黎明</button>
+  </div>
+  <div id="info">拖动旋转 · 双指缩放 · 点击切换场景</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.167.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.167.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(12, 8, 18);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 2, 0);
+    controls.maxPolarAngle = Math.PI * 0.48;
+    controls.minDistance = 6;
+    controls.maxDistance = 45;
+
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff5e0, 1.2);
+    sunLight.position.set(30, 40, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 100;
+    sunLight.shadow.camera.left = -30;
+    sunLight.shadow.camera.right = 30;
+    sunLight.shadow.camera.top = 30;
+    sunLight.shadow.camera.bottom = -30;
+    scene.add(sunLight);
+
+    // Sky
+    const skyGeo = new THREE.SphereGeometry(200, 32, 32);
+    const skyMat = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(sky);
+
+    // Fog
+    scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
+
+    // Ground
+    const groundGeo = new THREE.PlaneGeometry(80, 80);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d6b35, roughness: 0.9 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // ===== Cabin =====
+    const cabinGroup = new THREE.Group();
+
+    // Walls
+    const wallGeo = new THREE.BoxGeometry(6, 3.2, 5);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+    const walls = new THREE.Mesh(wallGeo, wallMat);
+    walls.position.y = 1.6;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    cabinGroup.add(walls);
+
+    // Roof
+    const roofGeo = new THREE.ConeGeometry(4.8, 2.2, 4);
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.7 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 3.6;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    cabinGroup.add(roof);
+
+    // Door
+    const doorGeo = new THREE.BoxGeometry(1.2, 2, 0.15);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a2c0a });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 1, 2.55);
+    cabinGroup.add(door);
+
+    // Windows
+    const winGeo = new THREE.BoxGeometry(1.1, 1.1, 0.1);
+    const winMat = new THREE.MeshStandardMaterial({ color: 0x87ceeb, emissive: 0x112233, emissiveIntensity: 0.3 });
+    const win1 = new THREE.Mesh(winGeo, winMat);
+    win1.position.set(-1.6, 1.8, 2.55);
+    const win2 = new THREE.Mesh(winGeo, winMat);
+    win2.position.set(1.6, 1.8, 2.55);
+    cabinGroup.add(win1, win2);
+
+    // Chimney
+    const chimGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
+    const chimMat = new THREE.MeshStandardMaterial({ color: 0x666666 });
+    const chimney = new THREE.Mesh(chimGeo, chimMat);
+    chimney.position.set(1.8, 4.2, -0.5);
+    cabinGroup.add(chimney);
+
+    cabinGroup.position.set(0, 0, -4);
+    scene.add(cabinGroup);
+
+    // ===== Trees =====
+    const trees = [];
+    const treePositions = [];
+    function createTree(x, z, scale = 1) {
+      const group = new THREE.Group();
+      const trunkGeo = new THREE.CylinderGeometry(0.15 * scale, 0.25 * scale, 2.5 * scale, 8);
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.y = 1.25 * scale;
+      trunk.castShadow = true;
+      group.add(trunk);
+
+      const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.8 });
+      for (let i = 0; i < 3; i++) {
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry((1.6 - i * 0.35) * scale, 1.8 * scale, 8),
+          foliageMat
+        );
+        cone.position.y = 2.2 * scale + i * 1.1 * scale;
+        cone.castShadow = true;
+        group.add(cone);
+      }
+      group.position.set(x, 0, z);
+      scene.add(group);
+      trees.push(group);
+      treePositions.push(new THREE.Vector3(x, 0, z));
+      return group;
+    }
+
+    // Place trees around
+    const treeData = [
+      [-12, -8, 1.1], [-8, 6, 0.9], [10, -10, 1.2], [14, 4, 0.8],
+      [-15, 8, 1.0], [6, 12, 0.95], [-6, -14, 1.15], [16, -6, 0.85],
+      [-18, -2, 1.05], [2, 16, 0.9], [-10, 14, 1.1], [12, 10, 0.88],
+      [-4, 18, 0.7], [18, 0, 1.0], [-16, -12, 0.92]
+    ];
+    treeData.forEach(([x, z, s]) => createTree(x, z, s));
+
+    // Small animals on trees (simple bird/squirrel shapes)
+    const animals = [];
+    function createBird(tree) {
+      const bird = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0x4a6fa5 }));
+      const wingL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.04, 0.12), new THREE.MeshStandardMaterial({ color: 0x3a5a85 }));
+      wingL.position.set(-0.15, 0.05, 0);
+      const wingR = wingL.clone();
+      wingR.position.x = 0.15;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshStandardMaterial({ color: 0x6a8fc5 }));
+      head.position.set(0.1, 0.05, 0);
+      bird.add(body, wingL, wingR, head);
+      const pos = tree.position.clone();
+      pos.y = 3.5 + Math.random() * 1.5;
+      pos.x += (Math.random() - 0.5) * 1.2;
+      pos.z += (Math.random() - 0.5) * 1.2;
+      bird.position.copy(pos);
+      scene.add(bird);
+      animals.push({ mesh: bird, type: 'bird', baseY: pos.y, phase: Math.random() * Math.PI * 2 });
+    }
+
+    function createSquirrel(tree) {
+      const sq = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), new THREE.MeshStandardMaterial({ color: 0xa67c52 }));
+      const tail = new THREE.Mesh(new THREE.SphereGeometry(0.08, 5, 4), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
+      tail.position.set(0, 0.05, -0.12);
+      sq.add(body, tail);
+      const pos = tree.position.clone();
+      pos.y = 2.2 + Math.random() * 0.8;
+      pos.x += (Math.random() - 0.5) * 0.8;
+      sq.position.copy(pos);
+      scene.add(sq);
+      animals.push({ mesh: sq, type: 'squirrel', baseY: pos.y });
+    }
+
+    // Add some animals to random trees
+    trees.slice(0, 8).forEach((t, i) => {
+      if (i % 2 === 0) createBird(t);
+      else createSquirrel(t);
+    });
+
+    // ===== Sunflower field in front of cabin =====
+    const sunflowers = [];
+    const fieldCenter = new THREE.Vector3(0, 0, 6);
+    for (let i = 0; i < 80; i++) {
+      const sf = new THREE.Group();
+      const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.04, 1.2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a7c23 })
+      );
+      stem.position.y = 0.6;
+      const head = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12),
+        new THREE.MeshStandardMaterial({ color: 0xf4d03f })
+      );
+      head.position.y = 1.25;
+      head.rotation.x = Math.PI / 2;
+      const center = new THREE.Mesh(
+        new THREE.CircleGeometry(0.08, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5d4037, side: THREE.DoubleSide })
+      );
+      center.position.y = 1.26;
+      center.rotation.x = Math.PI / 2;
+      sf.add(stem, head, center);
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 1.5 + Math.random() * 4.5;
+      sf.position.set(
+        fieldCenter.x + Math.cos(angle) * dist,
+        0,
+        fieldCenter.z + Math.sin(angle) * dist
+      );
+      sf.rotation.y = Math.random() * Math.PI;
+      scene.add(sf);
+      sunflowers.push(sf);
+    }
+
+    // Low grass / weeds
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x5a8c3a, roughness: 1 });
+    for (let i = 0; i < 120; i++) {
+      const g = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.15, 0.4),
+        grassMat
+      );
+      g.position.set(
+        (Math.random() - 0.5) * 14,
+        0.2,
+        3 + Math.random() * 8
+      );
+      g.rotation.y = Math.random() * Math.PI;
+      g.rotation.x = -0.3 + Math.random() * 0.6;
+      scene.add(g);
+    }
+
+    // ===== Butterflies and Bees =====
+    const insects = [];
+    function createInsect(isBee = false) {
+      const g = new THREE.Group();
+      const bodyColor = isBee ? 0xf4d03f : 0xff6b6b;
+      const body = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 5),
+        new THREE.MeshStandardMaterial({ color: bodyColor, emissive: bodyColor, emissiveIntensity: 0.2 })
+      );
+      if (isBee) {
+        const stripe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.055, 0.08, 6),
+          new THREE.MeshStandardMaterial({ color: 0x333333 })
+        );
+        stripe.rotation.z = Math.PI / 2;
+        g.add(stripe);
+      }
+      const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+      const wingL = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.1), wingMat);
+      wingL.position.set(-0.1, 0.04, 0);
+      const wingR = wingL.clone();
+      wingR.position.x = 0.1;
+      g.add(body, wingL, wingR);
+      g.userData.wingL = wingL;
+      g.userData.wingR = wingR;
+      const x = (Math.random() - 0.5) * 12;
+      const z = 4 + Math.random() * 6;
+      g.position.set(x, 0.8 + Math.random() * 1.5, z);
+      scene.add(g);
+      insects.push({
+        mesh: g,
+        isBee,
+        speed: 0.3 + Math.random() * 0.4,
+        phase: Math.random() * Math.PI * 2,
+        radius: 1.5 + Math.random() * 2,
+        center: new THREE.Vector3(x, g.position.y, z)
+      });
+    }
+    for (let i = 0; i < 12; i++) createInsect(i % 3 === 0);
+
+    // ===== Scene presets =====
+    const scenes = {
+      sunny: {
+        sky: 0x87ceeb,
+        fogColor: 0xc8e6ff,
+        fogNear: 50,
+        fogFar: 140,
+        ambient: 0.55,
+        sunColor: 0xfff5e0,
+        sunIntensity: 1.3,
+        sunPos: [35, 45, 15],
+        exposure: 1.15
+      },
+      fog: {
+        sky: 0xb0c4de,
+        fogColor: 0xd0d8e0,
+        fogNear: 8,
+        fogFar: 45,
+        ambient: 0.7,
+        sunColor: 0xe0e8f0,
+        sunIntensity: 0.5,
+        sunPos: [10, 20, 10],
+        exposure: 0.85
+      },
+      sunset: {
+        sky: 0xff7f50,
+        fogColor: 0xffb347,
+        fogNear: 30,
+        fogFar: 100,
+        ambient: 0.35,
+        sunColor: 0xff8c42,
+        sunIntensity: 1.6,
+        sunPos: [-20, 8, 25],
+        exposure: 1.25
+      },
+      night: {
+        sky: 0x0a0a2a,
+        fogColor: 0x151530,
+        fogNear: 25,
+        fogFar: 80,
+        ambient: 0.15,
+        sunColor: 0xaaccff,
+        sunIntensity: 0.25,
+        sunPos: [0, 30, -20],
+        exposure: 0.7
+      },
+      rain: {
+        sky: 0x5a6a7a,
+        fogColor: 0x7a8a9a,
+        fogNear: 15,
+        fogFar: 70,
+        ambient: 0.45,
+        sunColor: 0xc0d0e0,
+        sunIntensity: 0.4,
+        sunPos: [5, 25, 10],
+        exposure: 0.8
+      },
+      dawn: {
+        sky: 0xffb6c1,
+        fogColor: 0xffd1dc,
+        fogNear: 35,
+        fogFar: 110,
+        ambient: 0.4,
+        sunColor: 0xffcc88,
+        sunIntensity: 1.1,
+        sunPos: [25, 12, 20],
+        exposure: 1.05
+      }
+    };
+
+    let currentScene = 'sunny';
+    let rainParticles = null;
+
+    function applyScene(name) {
+      const s = scenes[name];
+      if (!s) return;
+      currentScene = name;
+      skyMat.color.setHex(s.sky);
+      scene.fog.color.setHex(s.fogColor);
+      scene.fog.near = s.fogNear;
+      scene.fog.far = s.fogFar;
+      ambientLight.intensity = s.ambient;
+      sunLight.color.setHex(s.sunColor);
+      sunLight.intensity = s.sunIntensity;
+      sunLight.position.set(...s.sunPos);
+      renderer.toneMappingExposure = s.exposure;
+
+      // UI active state
+      document.querySelectorAll('#ui button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.scene === name);
+      });
+
+      // Rain particles
+      if (name === 'rain') {
+        if (!rainParticles) createRain();
+        rainParticles.visible = true;
+      } else if (rainParticles) {
+        rainParticles.visible = false;
+      }
+    }
+
+    function createRain() {
+      const count = 800;
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 40;
+        positions[i * 3 + 1] = Math.random() * 20;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 40;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.08, transparent: true, opacity: 0.6 });
+      rainParticles = new THREE.Points(geo, mat);
+      scene.add(rainParticles);
+    }
+
+    // UI events
+    document.querySelectorAll('#ui button').forEach(btn => {
+      btn.addEventListener('click', () => applyScene(btn.dataset.scene));
+    });
+
+    applyScene('sunny');
+
+    // Animation loop
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      const dt = clock.getDelta();
+
+      controls.update();
+
+      // Animate insects (butterflies & bees)
+      insects.forEach((ins, i) => {
+        const ph = t * ins.speed + ins.phase;
+        ins.mesh.position.x = ins.center.x + Math.sin(ph) * ins.radius * 0.6;
+        ins.mesh.position.z = ins.center.z + Math.cos(ph * 0.7) * ins.radius * 0.5;
+        ins.mesh.position.y = ins.center.y + Math.sin(ph * 1.5) * 0.4;
+        ins.mesh.rotation.y = Math.sin(ph) * 0.5;
+        // Wing flap
+        const flap = Math.sin(t * (ins.isBee ? 25 : 12) + i) * 0.6;
+        if (ins.mesh.userData.wingL) {
+          ins.mesh.userData.wingL.rotation.z = flap;
+          ins.mesh.userData.wingR.rotation.z = -flap;
+        }
+      });
+
+      // Gentle animal movement
+      animals.forEach(a => {
+        if (a.type === 'bird') {
+          a.mesh.position.y = a.baseY + Math.sin(t * 2 + a.phase) * 0.15;
+          a.mesh.rotation.y = Math.sin(t * 0.5) * 0.3;
+        }
+      });
+
+      // Sunflower slight sway
+      sunflowers.forEach((sf, i) => {
+        sf.rotation.z = Math.sin(t * 0.8 + i) * 0.05;
+      });
+
+      // Rain fall
+      if (rainParticles && rainParticles.visible) {
+        const pos = rainParticles.geometry.attributes.position.array;
+        for (let i = 0; i < pos.length; i += 3) {
+          pos[i + 1] -= dt * 12;
+          if (pos[i + 1] < 0) pos[i + 1] = 18 + Math.random() * 4;
+        }
+        rainParticles.geometry.attributes.position.needsUpdate = true;
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Touch friendly hint
+    if ('ontouchstart' in window) {
+      document.getElementById('info').textContent = '单指拖动旋转 · 双指缩放 · 点击按钮切换天气';
+    }
+  </script>
+</body>
+</html>
